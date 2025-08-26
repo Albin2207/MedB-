@@ -1,0 +1,216 @@
+import 'package:dio/dio.dart';
+import 'package:dio_cookie_manager/dio_cookie_manager.dart';
+import 'package:cookie_jar/cookie_jar.dart';
+import 'package:medb_app/models/auth_model.dart';
+
+
+class ApiService {
+  static const String baseUrl = 'https://testapi.medb.co.in/api';
+  
+  late final Dio _dio;
+  late final CookieJar _cookieJar;
+  String? _accessToken;
+
+  ApiService() {
+    _cookieJar = CookieJar();
+    _dio = Dio(BaseOptions(
+      baseUrl: baseUrl,
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+    ));
+
+    // Add cookie manager
+    _dio.interceptors.add(CookieManager(_cookieJar));
+
+    // Add request interceptor to attach access token
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (_accessToken != null) {
+          options.headers['Authorization'] = 'Bearer $_accessToken';
+        }
+        print('REQUEST: ${options.method} ${options.path}');
+        print('HEADERS: ${options.headers}');
+        handler.next(options);
+      },
+      onResponse: (response, handler) {
+        print('RESPONSE: ${response.statusCode} ${response.requestOptions.path}');
+        handler.next(response);
+      },
+      onError: (error, handler) async {
+        print('ERROR: ${error.response?.statusCode} ${error.requestOptions.path}');
+        print('ERROR MESSAGE: ${error.message}');
+        
+        // Handle 401 Unauthorized - Token expired
+        if (error.response?.statusCode == 401) {
+          print('Token expired, attempting refresh...');
+          // Here we could implement token refresh logic
+          // For now, we'll just clear the token
+          _accessToken = null;
+        }
+        
+        handler.next(error);
+      },
+    ));
+
+    // Add logging interceptor
+    _dio.interceptors.add(LogInterceptor(
+      requestBody: true,
+      responseBody: true,
+      logPrint: (obj) => print(obj),
+    ));
+  }
+
+  void setAccessToken(String? token) {
+    _accessToken = token;
+  }
+
+  String? get accessToken => _accessToken;
+
+  Future<ApiResponse<void>> register(RegisterRequest request) async {
+    try {
+      final response = await _dio.post(
+        '/auth/register',
+        data: request.toJson(),
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final message = response.data['message'] ?? 'User registered successfully.';
+        return ApiResponse.success(message);
+      } else {
+        final message = response.data['message'] ?? 'Registration failed';
+        return ApiResponse.error(message);
+      }
+    } on DioException catch (e) {
+      String errorMessage = 'Registration failed';
+      
+      if (e.response?.data != null) {
+        if (e.response!.data is Map) {
+          errorMessage = e.response!.data['message'] ?? 
+                        e.response!.data['error'] ?? 
+                        'Registration failed';
+        }
+      } else if (e.type == DioExceptionType.connectionTimeout) {
+        errorMessage = 'Connection timeout. Please try again.';
+      } else if (e.type == DioExceptionType.receiveTimeout) {
+        errorMessage = 'Server response timeout. Please try again.';
+      } else if (e.type == DioExceptionType.unknown) {
+        errorMessage = 'No internet connection. Please check your connection.';
+      }
+      
+      return ApiResponse.error(errorMessage);
+    } catch (e) {
+      print('Unexpected error in register: $e');
+      return ApiResponse.error('An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<LoginResponse>> login(LoginRequest request) async {
+    try {
+      final response = await _dio.post(
+        '/auth/login',
+        data: request.toJson(),
+      );
+
+      if (response.statusCode == 200) {
+        final loginResponse = LoginResponse.fromJson(response.data);
+        
+        // Store access token
+        setAccessToken(loginResponse.accessToken);
+        
+        return ApiResponse.success(
+          'Login successful',
+          data: loginResponse,
+        );
+      } else {
+        final message = response.data['message'] ?? 'Login failed';
+        return ApiResponse.error(message);
+      }
+    } on DioException catch (e) {
+      String errorMessage = 'Login failed';
+      
+      if (e.response?.data != null) {
+        if (e.response!.data is Map) {
+          errorMessage = e.response!.data['message'] ?? 
+                        e.response!.data['error'] ?? 
+                        'Login failed';
+        }
+      } else if (e.type == DioExceptionType.connectionTimeout) {
+        errorMessage = 'Connection timeout. Please try again.';
+      } else if (e.type == DioExceptionType.receiveTimeout) {
+        errorMessage = 'Server response timeout. Please try again.';
+      } else if (e.type == DioExceptionType.unknown) {
+        errorMessage = 'No internet connection. Please check your connection.';
+      }
+      
+      return ApiResponse.error(errorMessage);
+    } catch (e) {
+      print('Unexpected error in login: $e');
+      return ApiResponse.error('An unexpected error occurred');
+    }
+  }
+
+  Future<ApiResponse<void>> logout() async {
+    try {
+      final response = await _dio.post('/auth/logout');
+
+      if (response.statusCode == 200) {
+        // Clear access token
+        setAccessToken(null);
+        
+        // Clear cookies
+        _cookieJar.deleteAll();
+        
+        final message = response.data['message'] ?? 'Logged out successfully';
+        return ApiResponse.success(message);
+      } else {
+        final message = response.data['message'] ?? 'Logout failed';
+        return ApiResponse.error(message);
+      }
+    } on DioException catch (e) {
+      // Even if logout fails on server, clear local data
+      setAccessToken(null);
+      _cookieJar.deleteAll();
+      
+      String errorMessage = 'Logout failed';
+      
+      if (e.response?.data != null) {
+        if (e.response!.data is Map) {
+          errorMessage = e.response!.data['message'] ?? 
+                        e.response!.data['error'] ?? 
+                        'Logout failed';
+        }
+      }
+      
+      // For logout, we might want to succeed locally even if server fails
+      return ApiResponse.success('Logged out locally');
+    } catch (e) {
+      // Clear local data even on unexpected error
+      setAccessToken(null);
+      _cookieJar.deleteAll();
+      
+      print('Unexpected error in logout: $e');
+      return ApiResponse.success('Logged out locally');
+    }
+  }
+
+  // Method to make authenticated requests
+  Future<Response> authenticatedRequest(
+    String path, {
+    String method = 'GET',
+    Map<String, dynamic>? data,
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    final options = Options(method: method);
+    
+    return await _dio.request(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      options: options,
+    );
+  }
+}
