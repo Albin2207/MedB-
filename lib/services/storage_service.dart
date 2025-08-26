@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:medb_app/models/auth_model.dart';
 
-
 class StorageService {
   static const FlutterSecureStorage _storage = FlutterSecureStorage(
     aOptions: AndroidOptions(
@@ -36,6 +35,8 @@ class StorageService {
         ),
         _storage.write(key: _isLoggedInKey, value: 'true'),
       ]);
+      print('Storage: Successfully stored login data');
+      print('Storage: Menu modules stored: ${loginResponse.menuData.length}');
     } catch (e) {
       print('Error storing login data: $e');
       rethrow;
@@ -83,7 +84,10 @@ class StorageService {
       final menuDataJson = await _storage.read(key: _menuDataKey);
       if (menuDataJson != null) {
         final List<dynamic> menuDataList = json.decode(menuDataJson);
-        return menuDataList.map((menu) => MenuData.fromJson(menu)).toList();
+        final menuData = menuDataList.map((menu) => MenuData.fromJson(menu)).toList();
+        print('Storage: Retrieved ${menuData.length} menu modules');
+        print('Storage: Modules: ${menuData.map((m) => '${m.moduleName} (${m.menus.length} items)').toList()}');
+        return menuData;
       }
       return [];
     } catch (e) {
@@ -107,6 +111,7 @@ class StorageService {
   Future<void> clearAll() async {
     try {
       await _storage.deleteAll();
+      print('Storage: Cleared all data');
     } catch (e) {
       print('Error clearing storage: $e');
     }
@@ -122,6 +127,7 @@ class StorageService {
         _storage.delete(key: _menuDataKey),
         _storage.delete(key: _isLoggedInKey),
       ]);
+      print('Storage: Cleared login data');
     } catch (e) {
       print('Error clearing login data: $e');
     }
@@ -131,9 +137,9 @@ class StorageService {
   Future<void> updateAccessToken(String newToken) async {
     try {
       await _storage.write(key: _accessTokenKey, value: newToken);
+      print('Storage: Updated access token');
     } catch (e) {
       print('Error updating access token: $e');
       rethrow;
     }
-  }
-}
+  }}

@@ -1,17 +1,10 @@
-
 import 'package:flutter/material.dart';
 import 'package:medb_app/models/auth_model.dart';
 import 'package:medb_app/services/auth_services.dart';
 
 import '../services/storage_service.dart';
 
-enum AuthState {
-  initial,
-  loading,
-  authenticated,
-  unauthenticated,
-  error,
-}
+enum AuthState { initial, loading, authenticated, unauthenticated, error }
 
 class AuthProvider extends ChangeNotifier {
   final ApiService _apiService = ApiService();
@@ -57,7 +50,7 @@ class AuthProvider extends ChangeNotifier {
       _setLoading();
 
       final isLoggedIn = await _storageService.isLoggedIn();
-      
+
       if (isLoggedIn) {
         // Load stored data
         final accessToken = await _storageService.getAccessToken();
@@ -68,7 +61,7 @@ class AuthProvider extends ChangeNotifier {
         if (accessToken != null && userDetails != null) {
           // Set access token in API service
           _apiService.setAccessToken(accessToken);
-          
+
           // Update provider state
           _user = userDetails;
           _menuData = menuData;
@@ -87,7 +80,7 @@ class AuthProvider extends ChangeNotifier {
       print('Error initializing auth: $e');
       _state = AuthState.unauthenticated;
     }
-    
+
     notifyListeners();
   }
 
@@ -119,6 +112,37 @@ class AuthProvider extends ChangeNotifier {
 
       final response = await _apiService.login(request);
 
+      // DEBUG LINE:
+      print('RAW API RESPONSE: ${response.data}');
+
+      // Debug: Log the entire response
+      print('=== LOGIN RESPONSE DEBUG ===');
+      print('Response success: ${response.success}');
+      print('Response message: ${response.message}');
+      if (response.data != null) {
+        print('Access Token length: ${response.data!.accessToken.length}');
+        print('Login Key: ${response.data!.loginKey}');
+        print('User Details: ${response.data!.userDetails.toJson()}');
+        print('Menu Data Count: ${response.data!.menuData.length}');
+        print(
+          'Raw Menu Data: ${response.data!.menuData.map((m) => m.toJson()).toList()}',
+        );
+
+        // Check individual menu items
+        for (int i = 0; i < response.data!.menuData.length; i++) {
+          final menu = response.data!.menuData[i];
+          print(
+            'Menu $i: ${menu.name} - Module: ${menu.module} - Path: ${menu.path} - Order: ${menu.order}',
+          );
+          if (menu.children != null && menu.children!.isNotEmpty) {
+            print('  Children: ${menu.children!.map((c) => c.name).toList()}');
+          }
+        }
+      } else {
+        print('Response data is NULL');
+      }
+      print('=== END LOGIN RESPONSE DEBUG ===');
+
       if (response.success && response.data != null) {
         final loginResponse = response.data!;
 
@@ -132,12 +156,20 @@ class AuthProvider extends ChangeNotifier {
         _state = AuthState.authenticated;
         _setMessage('Welcome, ${loginResponse.userDetails.firstName}!');
 
+        // Debug: Verify data was set correctly
+        print('=== PROVIDER STATE AFTER LOGIN ===');
+        print('User set: ${_user?.fullName}');
+        print('Menu data count: ${_menuData.length}');
+        print('Login key: $_loginKey');
+        print('=== END PROVIDER STATE DEBUG ===');
+
         return true;
       } else {
         _setError(response.message);
         return false;
       }
     } catch (e) {
+      print('Login error: $e');
       _setError('Login failed. Please try again.');
       return false;
     }
@@ -160,7 +192,6 @@ class AuthProvider extends ChangeNotifier {
       _loginKey = null;
       _state = AuthState.unauthenticated;
       _setMessage('Logged out successfully');
-
     } catch (e) {
       // Even if API call fails, clear local data
       await _storageService.clearLoginData();
@@ -181,7 +212,7 @@ class AuthProvider extends ChangeNotifier {
   // Get grouped menus by module
   Map<String, List<MenuData>> get groupedMenus {
     final Map<String, List<MenuData>> grouped = {};
-    
+
     for (final menu in _menuData) {
       final module = menu.module ?? 'General';
       if (!grouped.containsKey(module)) {

@@ -16,6 +16,17 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   @override
+  void initState() {
+    super.initState();
+    // Debug: Print menu data when dashboard loads
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      print('Dashboard loaded. Menu data count: ${authProvider.menuData.length}');
+      print('Menu modules: ${authProvider.menuData.map((m) => '${m.moduleName} (${m.menus.length} items)').toList()}');
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
@@ -144,13 +155,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                                 const SizedBox(height: AppTheme.paddingM),
                                 _buildInfoRow(
-                                  'Login Key',
-                                  authProvider.loginKey ?? 'Not available',
+                                  'User ID',
+                                  authProvider.user!.userId ?? authProvider.user!.id ?? 'Not available',
                                 ),
                                 const SizedBox(height: AppTheme.paddingS),
                                 _buildInfoRow(
-                                  'User ID',
-                                  authProvider.user!.id ?? 'Not available',
+                                  'Total Modules',
+                                  '${authProvider.menuData.length}',
+                                ),
+                                const SizedBox(height: AppTheme.paddingS),
+                                _buildInfoRow(
+                                  'Total Menu Items',
+                                  '${authProvider.menuData.fold(0, (sum, module) => sum + module.menus.length)}',
                                 ),
                               ],
                             ),
@@ -159,25 +175,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                         const SizedBox(height: AppTheme.paddingL),
 
-                        // Menu Data
-                        if (authProvider.menuData.isNotEmpty) ...[
-                          Card(
-                            child: Padding(
-                              padding: const EdgeInsets.all(AppTheme.paddingL),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Available Menus',
-                                    style: AppTheme.headingSmall,
-                                  ),
-                                  const SizedBox(height: AppTheme.paddingM),
-                                  _buildMenuSection(context, authProvider),
-                                ],
-                              ),
+                        // Menu Data Section
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(AppTheme.paddingL),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Available Modules & Menus',
+                                  style: AppTheme.headingSmall,
+                                ),
+                                const SizedBox(height: AppTheme.paddingM),
+                                _buildMenuSection(context, authProvider),
+                              ],
                             ),
                           ),
-                        ],
+                        ),
 
                         const SizedBox(height: AppTheme.paddingXL),
 
@@ -208,7 +222,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SizedBox(
-          width: 100,
+          width: 120,
           child: Text(
             '$label:',
             style: AppTheme.bodyMedium.copyWith(
@@ -227,115 +241,202 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildMenuSection(BuildContext context,AuthProvider authProvider) {
-  if (authProvider.menuData.isEmpty) {
-    return Text(
-      'No menus available',
-      style: AppTheme.bodyMedium.copyWith(
-        color: AppTheme.textSecondary,
+  Widget _buildMenuSection(BuildContext context, AuthProvider authProvider) {
+    if (authProvider.menuData.isEmpty) {
+      return Column(
+        children: [
+          Icon(
+            Icons.menu_open,
+            size: 64,
+            color: AppTheme.textSecondary.withOpacity(0.5),
+          ),
+          const SizedBox(height: AppTheme.paddingM),
+          Text(
+            'No modules available',
+            style: AppTheme.bodyLarge.copyWith(
+              color: AppTheme.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppTheme.paddingS),
+          Text(
+            'Module data might not have loaded properly.',
+            style: AppTheme.bodyMedium.copyWith(
+              color: AppTheme.textSecondary,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      );
+    }
+
+    // Sort modules by sortOrder
+    final sortedModules = List<MenuData>.from(authProvider.menuData);
+    sortedModules.sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: sortedModules.map((module) => _buildModuleCard(context, module)).toList(),
+    );
+  }
+
+  Widget _buildModuleCard(BuildContext context, MenuData module) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppTheme.paddingM),
+      elevation: 2,
+      child: ExpansionTile(
+        leading: module.moduleIcon != null
+            ? CircleAvatar(
+                radius: 20,
+                backgroundImage: NetworkImage(module.moduleIcon!),
+                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                onBackgroundImageError: (_, __) {},
+                child: module.moduleIcon!.isNotEmpty
+                    ? null
+                    : Icon(
+                        _getModuleIcon(module.moduleName),
+                        color: AppTheme.primaryColor,
+                        size: 20,
+                      ),
+              )
+            : CircleAvatar(
+                radius: 20,
+                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                child: Icon(
+                  _getModuleIcon(module.moduleName),
+                  color: AppTheme.primaryColor,
+                  size: 20,
+                ),
+              ),
+        title: Text(
+          module.moduleName,
+          style: AppTheme.bodyLarge.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          '${module.menus.length} menu${module.menus.length == 1 ? '' : 's'} available',
+          style: AppTheme.bodySmall.copyWith(
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        children: module.menus.isEmpty
+            ? [
+                Padding(
+                  padding: const EdgeInsets.all(AppTheme.paddingM),
+                  child: Text(
+                    'No menus available in this module',
+                    style: AppTheme.bodyMedium.copyWith(
+                      color: AppTheme.textSecondary,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              ]
+            : module.menus
+                .map((menu) => _buildMenuItem(context, menu, module.moduleName))
+                .toList(),
       ),
     );
   }
 
-  // Group menus by module
-  final Map<String, List<MenuData>> groupedMenus = {};
-  for (var menu in authProvider.menuData) {
-    final moduleName = menu.module ?? 'General';
-    groupedMenus.putIfAbsent(moduleName, () => []).add(menu);
-  }
-
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: groupedMenus.entries.map((entry) {
-      final moduleName = entry.key;
-      final menus = entry.value;
-
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Module Header
-          Container(
-            padding: const EdgeInsets.symmetric(
-              vertical: AppTheme.paddingS,
-              horizontal: AppTheme.paddingM,
-            ),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(AppTheme.borderRadius),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.folder,
-                  size: 16,
-                  color: AppTheme.primaryColor,
-                ),
-                const SizedBox(width: AppTheme.paddingS),
-                Text(
-                  moduleName,
-                  style: AppTheme.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.primaryColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: AppTheme.paddingS),
-
-          // Menu Items (with recursive children)
-          ...menus.map((menu) => _buildMenuItem(context, menu, 0)).toList(),
-          const SizedBox(height: AppTheme.paddingM),
-        ],
-      );
-    }).toList(),
-  );
-}
-
-Widget _buildMenuItem(BuildContext context, menu, int indentLevel) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Padding(
-        padding: EdgeInsets.only(left: AppTheme.paddingL * indentLevel),
-        child: ListTile(
-          dense: true,
-          leading: Icon(
-            Icons.arrow_forward_ios,
-            size: 12,
-            color: AppTheme.textSecondary,
-          ),
-          title: Text(
-            menu.name,
-            style: AppTheme.bodyMedium,
-          ),
-          subtitle: menu.path != null
-              ? Text(
-                  menu.path!,
-                  style: AppTheme.bodySmall,
-                )
-              : null,
-          onTap: () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Menu "${menu.name}" tapped'),
+  Widget _buildMenuItem(BuildContext context, MenuItem menu, String moduleName) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppTheme.paddingL,
+        vertical: AppTheme.paddingS,
+      ),
+      leading: menu.menuIcon != null && menu.menuIcon!.isNotEmpty
+          ? CircleAvatar(
+              radius: 18,
+              backgroundImage: NetworkImage(menu.menuIcon!),
+              backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+              onBackgroundImageError: (_, __) {},
+              child: null,
+            )
+          : CircleAvatar(
+              radius: 18,
+              backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+              child: Icon(
+                _getMenuIcon(menu.menuName),
+                color: AppTheme.primaryColor,
+                size: 18,
               ),
-            );
-            // Here you can navigate to the path if needed
-          },
+            ),
+      title: Text(
+        menu.menuName,
+        style: AppTheme.bodyMedium.copyWith(
+          fontWeight: FontWeight.w500,
         ),
       ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (menu.actionName != null && menu.actionName!.isNotEmpty)
+            Text(
+              menu.actionName!,
+              style: AppTheme.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
+              ),
+            ),
+          if (menu.controllerName != null && menu.controllerName!.isNotEmpty)
+            Text(
+              'Path: ${menu.controllerName!}',
+              style: AppTheme.bodySmall.copyWith(
+                color: AppTheme.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+        ],
+      ),
+      trailing: Icon(
+        Icons.arrow_forward_ios,
+        size: 16,
+        color: AppTheme.textSecondary,
+      ),
+      onTap: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${menu.menuName} from $moduleName module tapped'),
+            backgroundColor: AppTheme.primaryColor,
+          ),
+        );
+        print('Menu tapped: ${menu.menuName}');
+        print('Controller: ${menu.controllerName ?? 'No controller specified'}');
+        print('Action: ${menu.actionName ?? 'No action specified'}');
+        // Here you can implement navigation based on controllerName
+      },
+    );
+  }
 
-      // Render children recursively if any
-      if (menu.children != null && menu.children!.isNotEmpty)
-        ...menu.children!.map((child) => _buildMenuItem(context, child, indentLevel + 1)),
-    ],
-  );
-}
+  IconData _getModuleIcon(String moduleName) {
+    final name = moduleName.toLowerCase();
+    if (name.contains('patient')) return Icons.people;
+    if (name.contains('doctor')) return Icons.medical_services;
+    if (name.contains('appointment')) return Icons.calendar_today;
+    if (name.contains('billing') || name.contains('payment')) return Icons.payment;
+    if (name.contains('inventory')) return Icons.inventory;
+    if (name.contains('report')) return Icons.assessment;
+    if (name.contains('setting')) return Icons.settings;
+    if (name.contains('admin')) return Icons.admin_panel_settings;
+    return Icons.folder;
+  }
 
+  IconData _getMenuIcon(String menuName) {
+    final name = menuName.toLowerCase();
+    if (name.contains('appointment')) return Icons.calendar_today;
+    if (name.contains('record') || name.contains('history')) return Icons.history;
+    if (name.contains('prescription')) return Icons.medication;
+    if (name.contains('billing') || name.contains('payment')) return Icons.payment;
+    if (name.contains('report')) return Icons.assessment;
+    if (name.contains('setting')) return Icons.settings;
+    if (name.contains('profile')) return Icons.person;
+    if (name.contains('dashboard')) return Icons.dashboard;
+    if (name.contains('health')) return Icons.health_and_safety;
+    if (name.contains('medical')) return Icons.medical_services;
+    return Icons.menu;
+  }
 
   void _handleLogout() async {
-    // Show confirmation dialog
     final shouldLogout = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
