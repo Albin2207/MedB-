@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:medb_app/utils/theme.dart';
+import 'package:medb_app/core/theme.dart';
 
 
 class LoadingOverlay extends StatelessWidget {

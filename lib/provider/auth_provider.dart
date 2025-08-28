@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:medb_app/models/auth_model.dart';
-import 'package:medb_app/services/auth_services.dart';
-
-import '../services/storage_service.dart';
+import 'package:medb_app/data/models/auth_model/login_model.dart';
+import 'package:medb_app/data/models/auth_model/registration_model.dart';
+import 'package:medb_app/data/models/menu_model/menu_model.dart';
+import 'package:medb_app/data/models/user_model/user_model.dart';
+import 'package:medb_app/data/services/api_services.dart';
+import '../data/services/storage_service.dart';
 
 enum AuthState { initial, loading, authenticated, unauthenticated, error }
 
@@ -15,6 +17,7 @@ class AuthProvider extends ChangeNotifier {
   UserDetails? _user;
   List<MenuData> _menuData = [];
   String? _loginKey;
+  String? _refreshToken; // Add refresh token storage
 
   // Getters
   AuthState get state => _state;
@@ -22,6 +25,7 @@ class AuthProvider extends ChangeNotifier {
   UserDetails? get user => _user;
   List<MenuData> get menuData => _menuData;
   String? get loginKey => _loginKey;
+  String? get refreshToken => _refreshToken;
   bool get isAuthenticated => _state == AuthState.authenticated;
   bool get isLoading => _state == AuthState.loading;
 
@@ -48,24 +52,26 @@ class AuthProvider extends ChangeNotifier {
   Future<void> initializeAuth() async {
     try {
       _setLoading();
-
       final isLoggedIn = await _storageService.isLoggedIn();
 
       if (isLoggedIn) {
         // Load stored data
         final accessToken = await _storageService.getAccessToken();
+        final refreshToken = await _storageService.getRefreshToken();
         final loginKey = await _storageService.getLoginKey();
         final userDetails = await _storageService.getUserDetails();
         final menuData = await _storageService.getMenuData();
 
         if (accessToken != null && userDetails != null) {
-          // Set access token in API service
+          // Set tokens in API service
           _apiService.setAccessToken(accessToken);
+          _apiService.setRefreshToken(refreshToken);
 
           // Update provider state
           _user = userDetails;
           _menuData = menuData;
           _loginKey = loginKey;
+          _refreshToken = refreshToken;
           _state = AuthState.authenticated;
           _message = 'Welcome back, ${userDetails.firstName}!';
         } else {
@@ -80,7 +86,6 @@ class AuthProvider extends ChangeNotifier {
       print('Error initializing auth: $e');
       _state = AuthState.unauthenticated;
     }
-
     notifyListeners();
   }
 
@@ -88,7 +93,6 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> register(RegisterRequest request) async {
     try {
       _setLoading();
-
       final response = await _apiService.register(request);
 
       if (response.success) {
@@ -109,39 +113,9 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> login(LoginRequest request) async {
     try {
       _setLoading();
-
       final response = await _apiService.login(request);
 
-      // DEBUG LINE:
-      print('RAW API RESPONSE: ${response.data}');
-
-      // Debug: Log the entire response
-      print('=== LOGIN RESPONSE DEBUG ===');
-      print('Response success: ${response.success}');
-      print('Response message: ${response.message}');
-      if (response.data != null) {
-        print('Access Token length: ${response.data!.accessToken.length}');
-        print('Login Key: ${response.data!.loginKey}');
-        print('User Details: ${response.data!.userDetails.toJson()}');
-        print('Menu Data Count: ${response.data!.menuData.length}');
-        print(
-          'Raw Menu Data: ${response.data!.menuData.map((m) => m.toJson()).toList()}',
-        );
-
-        // Check individual menu items
-        for (int i = 0; i < response.data!.menuData.length; i++) {
-          final menu = response.data!.menuData[i];
-          print(
-            'Menu $i: ${menu.name} - Module: ${menu.module} - Path: ${menu.path} - Order: ${menu.order}',
-          );
-          if (menu.children != null && menu.children!.isNotEmpty) {
-            print('  Children: ${menu.children!.map((c) => c.name).toList()}');
-          }
-        }
-      } else {
-        print('Response data is NULL');
-      }
-      print('=== END LOGIN RESPONSE DEBUG ===');
+      if (response.data != null) {}
 
       if (response.success && response.data != null) {
         final loginResponse = response.data!;
@@ -153,15 +127,9 @@ class AuthProvider extends ChangeNotifier {
         _user = loginResponse.userDetails;
         _menuData = loginResponse.menuData;
         _loginKey = loginResponse.loginKey;
+        _refreshToken = loginResponse.refreshToken; // Store refresh token
         _state = AuthState.authenticated;
         _setMessage('Welcome, ${loginResponse.userDetails.firstName}!');
-
-        // Debug: Verify data was set correctly
-        print('=== PROVIDER STATE AFTER LOGIN ===');
-        print('User set: ${_user?.fullName}');
-        print('Menu data count: ${_menuData.length}');
-        print('Login key: $_loginKey');
-        print('=== END PROVIDER STATE DEBUG ===');
 
         return true;
       } else {
@@ -169,38 +137,50 @@ class AuthProvider extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      print('Login error: $e');
       _setError('Login failed. Please try again.');
       return false;
     }
   }
 
-  // Logout user
-  Future<void> logout() async {
+  // Logout user - FIXED VERSION
+  Future<bool> logout() async {
     try {
       _setLoading();
 
-      // Call logout API
-      await _apiService.logout();
+      // Call logout API with proper tokens
+      final response = await _apiService.logout();
 
-      // Clear stored data
-      await _storageService.clearLoginData();
+      if (response.success) {
+        // Clear stored data
+        await _storageService.clearLoginData();
 
-      // Reset provider state
-      _user = null;
-      _menuData = [];
-      _loginKey = null;
-      _state = AuthState.unauthenticated;
-      _setMessage('Logged out successfully');
+        // Reset provider state
+        _resetAuthState();
+        _setMessage('Logged out successfully');
+        return true;
+      } else {
+        // Even if API call fails, clear local data for security
+        await _storageService.clearLoginData();
+        _resetAuthState();
+        _setMessage('Logged out successfully');
+        return true; // Return true to allow UI navigation
+      }
     } catch (e) {
       // Even if API call fails, clear local data
       await _storageService.clearLoginData();
-      _user = null;
-      _menuData = [];
-      _loginKey = null;
-      _state = AuthState.unauthenticated;
+      _resetAuthState();
       _setMessage('Logged out successfully');
+      return true; // Return true to allow UI navigation
     }
+  }
+
+  // Helper method to reset auth state
+  void _resetAuthState() {
+    _user = null;
+    _menuData = [];
+    _loginKey = null;
+    _refreshToken = null;
+    _state = AuthState.unauthenticated;
   }
 
   // Clear current message
@@ -212,7 +192,6 @@ class AuthProvider extends ChangeNotifier {
   // Get grouped menus by module
   Map<String, List<MenuData>> get groupedMenus {
     final Map<String, List<MenuData>> grouped = {};
-
     for (final menu in _menuData) {
       final module = menu.module ?? 'General';
       if (!grouped.containsKey(module)) {
@@ -225,20 +204,13 @@ class AuthProvider extends ChangeNotifier {
     for (final moduleMenus in grouped.values) {
       moduleMenus.sort((a, b) => a.order.compareTo(b.order));
     }
-
     return grouped;
   }
 
   // Get ordered modules
   List<String> get orderedModules {
     final modules = groupedMenus.keys.toList();
-    // You can implement custom module ordering logic here
     modules.sort();
     return modules;
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }

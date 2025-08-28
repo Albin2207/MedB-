@@ -70,7 +70,7 @@ class FormValidators {
   // Middle name validation (optional)
   static String? validateMiddleName(String? value) {
     if (value != null && value.isNotEmpty) {
-      if (value.length < 1) {
+      if (value.isEmpty) {
         return 'Middle name must be at least 1 character';
       }
       if (!RegExp(r'^[a-zA-Z\s]+$').hasMatch(value)) {
