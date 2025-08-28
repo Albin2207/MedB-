@@ -6,7 +6,6 @@ import 'package:medb_app/presentation/screens/dashboard/widgets/icon_helper.dart
 import 'package:medb_app/core/theme.dart';
 import 'package:provider/provider.dart';
 
-
 class AppDrawer extends StatelessWidget {
   const AppDrawer({super.key});
 
@@ -17,11 +16,13 @@ class AppDrawer extends StatelessWidget {
       child: Column(
         children: [
           const DrawerHeader(),
-          Expanded(child: Consumer<AuthProvider>(
-            builder: (context, authProvider, child) {
-              return DrawerMenuItems(menuData: authProvider.menuData);
-            },
-          )),
+          Expanded(
+            child: Consumer<AuthProvider>(
+              builder: (context, authProvider, child) {
+                return DrawerMenuItems(menuData: authProvider.menuData);
+              },
+            ),
+          ),
         ],
       ),
     );
@@ -45,11 +46,7 @@ class DrawerHeader extends StatelessWidget {
       child: Center(
         child: SizedBox(
           height: 80,
-          child: Image.asset(
-            'assets/medbsmalllogo.png',
-            fit: BoxFit.contain,
-           
-          ),
+          child: Image.asset('assets/medbsmalllogo.png', fit: BoxFit.contain),
         ),
       ),
     );
@@ -79,17 +76,20 @@ class _DrawerMenuItemsState extends State<DrawerMenuItems> {
 
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      children: sortedModules.map((module) => 
-        ModuleMenuItem(
-          module: module,
-          isExpanded: _expandedModule == module.moduleName,
-          onExpansionChanged: (expanded) {
-            setState(() {
-              _expandedModule = expanded ? module.moduleName : null;
-            });
-          },
-        ),
-      ).toList(),
+      children:
+          sortedModules
+              .map(
+                (module) => ModuleMenuItem(
+                  module: module,
+                  isExpanded: _expandedModule == module.moduleName,
+                  onExpansionChanged: (expanded) {
+                    setState(() {
+                      _expandedModule = expanded ? module.moduleName : null;
+                    });
+                  },
+                ),
+              )
+              .toList(),
     );
   }
 }
@@ -115,8 +115,7 @@ class EmptyMenuState extends StatelessWidget {
   }
 }
 
-
-  class ModuleMenuItem extends StatelessWidget {
+class ModuleMenuItem extends StatelessWidget {
   final MenuData module;
   final bool isExpanded;
   final Function(bool) onExpansionChanged;
@@ -134,22 +133,48 @@ class EmptyMenuState extends StatelessWidget {
       return SingleModuleItem(module: module);
     }
 
-    return ExpansionTile(
-      key: PageStorageKey<String>(module.moduleName),
-      leading: IconHelper.getModuleIcon(module.moduleName, context),
-      title: Text(
-        module.moduleName,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-          color: Colors.black87,
+    return Column(
+      children: [
+        // Main module item with container styling
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color.fromARGB(255, 230, 227, 227), // Light grey background
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey[300]!, width: 0.5),
+            boxShadow: [
+              BoxShadow(
+                // ignore: deprecated_member_use
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: ListTile(
+            leading: IconHelper.getModuleIcon(module.moduleName, context),
+            title: Text(
+              module.moduleName,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+            // Remove the default trailing icon
+            trailing: const SizedBox.shrink(),
+            onTap: () {
+              onExpansionChanged(!isExpanded);
+            },
+          ),
         ),
-      ),
-      initiallyExpanded: isExpanded,
-      onExpansionChanged: onExpansionChanged,
-      children: module.menus.map((menu) => 
-        SubMenuItem(menu: menu, moduleName: module.moduleName),
-      ).toList(),
+        // Sub-menu items (if expanded)
+        if (isExpanded)
+          ...module.menus.map(
+            (menu) => SubMenuItem(menu: menu, moduleName: module.moduleName),
+          ),
+      ],
     );
   }
 }
@@ -183,11 +208,7 @@ class SubMenuItem extends StatelessWidget {
   final MenuItem menu;
   final String moduleName;
 
-  const SubMenuItem({
-    super.key,
-    required this.menu,
-    required this.moduleName,
-  });
+  const SubMenuItem({super.key, required this.menu, required this.moduleName});
 
   @override
   Widget build(BuildContext context) {
@@ -214,9 +235,6 @@ class SubMenuItem extends StatelessWidget {
             backgroundColor: AppTheme.primaryColor,
           ),
         );
-        print('Menu tapped: ${menu.menuName}');
-        print('Controller: ${menu.controllerName ?? 'No controller specified'}');
-        print('Action: ${menu.actionName ?? 'No action specified'}');
       },
     );
   }

@@ -1,16 +1,52 @@
-# medb_app
+📱 Medb App
 
-A new Flutter project.
+A Flutter application for the machine task submission.
 
-## Getting Started
+🚀 Setup Instructions
+1. Clone the repository
+git clone <your-repo-url>
+cd medb_app
 
-This project is a starting point for a Flutter application.
+2. Install dependencies
+flutter pub get
 
-A few resources to get you started if this is your first Flutter project:
+3. Run the app
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+For Android (emulator/USB device):
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+flutter run
+
+
+For iOS (Mac only):
+
+flutter run
+
+4. Build APK (for submission)
+flutter build apk
+
+
+The APK will be available at:
+
+build/app/outputs/flutter-apk/app-release.apk
+
+📦 Dependencies Used
+
+dio – API requests
+
+dio_cookie_manager & cookie_jar – Session management
+
+flutter_secure_storage – Secure local storage
+
+go_router – Navigation & routing
+
+provider – State management
+
+email_validator – Form validations
+
+flutter_launcher_icons – Custom app icons
+
+📂 Assets
+
+assets/medb.png
+
+assets/medbsmalllogo.png

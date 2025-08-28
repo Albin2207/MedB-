@@ -54,7 +54,7 @@ class DashboardScreen extends StatelessWidget {
                     backgroundColor: Colors.white,
                     radius: 20,
                     child: CircleAvatar(
-                      backgroundColor: Colors.blue,
+                      backgroundColor: const Color.fromARGB(255, 148, 60, 183),
                       radius: 20,
                       child: IconButton(
                         icon: const Icon(Icons.person, color: Colors.white),
